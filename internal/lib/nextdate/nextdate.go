@@ -1,4 +1,4 @@
-package taskrepeat
+package nextdate
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 		// Необходимо отдельное условие для событий
 		// Когда date уже больше чем now
 		if dateParse.After(now) {
-			nextDate = fmt.Sprint(dateParse.AddDate(0, 0, valueInt))
+			nextDate = fmt.Sprint(dateParse.AddDate(0, 0, valueInt).Format("20060102"))
 			return nextDate, nil
 		}
 
@@ -74,13 +74,13 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			}
 		}
 
-		// Следующая дата и будет нашей искомой
-		nextDate = fmt.Sprint(dateParse)
+		nextDate = dateParse.Format("20060102")
+
 	case "y":
 		// Необходимо отдельное условие для событий
 		// Когда date уже больше чем now
 		if dateParse.After(now) {
-			nextDate = fmt.Sprint(dateParse.AddDate(1, 0, 0))
+			nextDate = fmt.Sprint(dateParse.AddDate(1, 0, 0).Format("20060102"))
 			return nextDate, nil
 		}
 
@@ -95,8 +95,8 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			}
 		}
 
-		// Следующая дата и будет нашей искомой
-		nextDate = fmt.Sprint(dateParse)
+		nextDate = dateParse.Format("20060102")
+
 	case "w":
 		// Обработаем сразу ошибку пустого value
 		if value == "" {
@@ -134,7 +134,7 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 		j := 1
 		for i := today + 1; i < 8; i++ {
 			if search(i, weekInts) {
-				nextDate = fmt.Sprint(dateParse.AddDate(0, 0, j))
+				nextDate = fmt.Sprint(dateParse.AddDate(0, 0, j).Format("20060102"))
 				break
 			}
 			if i == 7 {
@@ -185,8 +185,6 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 		}
 
 		nextDate = fmt.Sprint(findNextDate(now, intDaysOfMonth, intMonths))
-		return nextDate, nil
-
 	default:
 		return "", fmt.Errorf("неверный формат repeat")
 	}
@@ -257,7 +255,7 @@ func findNextDate(now time.Time, days, months []int) time.Time {
 // calculateDate вычисляет дату на основе года, месяца и дня (включая -1 и -2).
 func calculateDate(year, month, day int) time.Time {
 	// Определяем количество дней в месяце
-	lastDay := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC).Day() - 1
+	lastDay := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.Local).Day() - 1
 	var targetDay int
 	if day > 0 {
 		targetDay = day
@@ -273,5 +271,5 @@ func calculateDate(year, month, day int) time.Time {
 	}
 
 	// Возвращаем рассчитанную дату
-	return time.Date(year, time.Month(month), targetDay, 0, 0, 0, 0, time.UTC)
+	return time.Date(year, time.Month(month), targetDay, 0, 0, 0, 0, time.Local)
 }

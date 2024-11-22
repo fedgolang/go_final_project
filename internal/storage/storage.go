@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"log"
 	"os"
-	"time"
 )
 
 type Scheduler struct {
@@ -12,11 +11,10 @@ type Scheduler struct {
 }
 
 type Task struct {
-	id      int
-	date    time.Time
-	title   string
-	comment string
-	repeat  string
+	Date    string `json:"date,omitempty"`
+	Title   string `json:"title"`
+	Comment string `json:"comment,omitempty"`
+	Repeat  string `json:"repeat,omitempty"`
 }
 
 // Функция открытия коннекта к БД
@@ -59,20 +57,22 @@ func NewScheduler(DBPath string) (*Scheduler, *sql.DB) {
 
 }
 
-func (s Scheduler) GetTask(id int) (Task, error) {
-	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat FROM scheduler WHERE id =?")
+func (s *Scheduler) PostTask(task Task) (int, error) {
+	stmt, err := s.db.Prepare("INSERT INTO scheduler(date, title, comment, repeat) values(?,?,?,?)")
 	if err != nil {
-		return Task{}, err
+		return 0, err
 	}
-	defer stmt.Close() // По завершению закроем коннект
+	defer stmt.Close()
 
-	var task Task
-
-	err = stmt.QueryRow(id).Scan(&task)
+	res, err := stmt.Exec(task.Date, task.Title, task.Comment, task.Repeat)
 	if err != nil {
-		return Task{}, err
+		return 0, err
 	}
 
-	return task, nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
 
+	return int(id), nil
 }
