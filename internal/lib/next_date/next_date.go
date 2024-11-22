@@ -33,21 +33,27 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 
 	rule := repeatSlice[0]
 	value := ""
+
+	// Проверим, что нам пришли данные о днях или месяцах
 	if len(repeatSlice) > 1 {
-		value = repeatSlice[1]
+		// И проверим, что они не пустые
+		if len(strings.TrimSpace(repeatSlice[1])) > 0 {
+			value = repeatSlice[1]
+		}
 	}
+
 	switch rule {
 	case "d":
 		// Пробуем перевести число дней в int
 		valueInt, err := strconv.Atoi(value)
 		// Если нам передали непереводимое в число значение, выходим
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("значение дня передано некорректно: %s", err)
 		}
 
 		// По ТЗ, если значение больше чем 400, выходим
 		if valueInt > 400 {
-			return "", fmt.Errorf("превышен максимально допустимый интервал")
+			return "", fmt.Errorf("превышен максимально допустимый интервал количества дней")
 		}
 
 		// Необходимо отдельное условие для событий
@@ -144,12 +150,24 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 
 		// Добавим переменные для проверки, есть ли необязательная последовательность
 		month := ""
-		monthsOfYear := []string{}
+		intMonths := []int{}
 		if len(repeatSlice) > 2 {
 			month = repeatSlice[2]
 		}
 		if month != "" {
-			monthsOfYear = strings.Split(month, ",")
+			monthsOfYear := strings.Split(month, ",")
+
+			// Переводим месяца в int
+			for _, month := range monthsOfYear {
+				intMonth, err := strconv.Atoi(month)
+				if err != nil {
+					return "", err
+				}
+				if intMonth > 12 || intMonth < 1 {
+					return "", fmt.Errorf("числовое значение месяца некорректно: %d", intMonth)
+				}
+				intMonths = append(intMonths, intMonth)
+			}
 		}
 
 		// Берём все дни из обязательной последовательности
@@ -162,18 +180,12 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			if err != nil {
 				return "", err
 			}
+
 			intDaysOfMonth = append(intDaysOfMonth, intDay)
 		}
 
-		// Пройдёмся по всем числам внутри intDaysOfMonth
-		target := now.Day() + 1
-		for {
-			if search(target, intDaysOfMonth) {
-				nextDate = fmt.Sprint(now.AddDate(0, 0, target))
-				break
-			}
-			target++
-		}
+		nextDate = fmt.Sprint(findNextDate(now, intDaysOfMonth, intMonths))
+		return nextDate, nil
 
 	default:
 		return "", fmt.Errorf("неверный формат repeat")
@@ -192,10 +204,74 @@ func search(target int, slice []int) bool {
 	return false
 }
 
-func lastDayOfMonth(year int, month time.Month) time.Time {
-	// Ищем первый день следующего месяца
-	firstDayNextMonth := time.Date(year, month+1, 1, 0, 0, 0, 0, time.UTC)
-	// Вычитаем один день
-	lastDay := firstDayNextMonth.AddDate(0, 0, -1)
-	return lastDay
+// findNextDate находит ближайшую дату на основе правил.
+func findNextDate(now time.Time, days, months []int) time.Time {
+	currentYear, currentMonth := now.Year(), int(now.Month())
+	var candidates []time.Time
+
+	// Определяем, какие месяцы нужно учитывать
+	monthSet := map[int]bool{}
+	if len(months) == 0 {
+		// Если месяцы не указаны, берем все 12
+		for i := 1; i <= 12; i++ {
+			monthSet[i] = true
+		}
+	} else {
+		for _, m := range months {
+			monthSet[m] = true
+		}
+	}
+
+	// Генерируем даты
+	for monthOffset := 0; monthOffset < 24; monthOffset++ { // 2 года вперёд для поиска
+		month := (currentMonth+monthOffset-1)%12 + 1
+		year := currentYear + (currentMonth+monthOffset-1)/12
+
+		// Пропускаем месяцы, не указанные в правилах
+		if !monthSet[month] {
+			continue
+		}
+
+		// Для каждого указанного дня месяца добавляем кандидатов
+		for _, day := range days {
+			date := calculateDate(year, month, day)
+			if date.After(now) {
+				candidates = append(candidates, date)
+			}
+		}
+	}
+
+	// Найти минимальную дату
+	if len(candidates) == 0 {
+		return time.Time{}
+	}
+	minDate := candidates[0]
+	for _, d := range candidates {
+		if d.Before(minDate) {
+			minDate = d
+		}
+	}
+	return minDate
+}
+
+// calculateDate вычисляет дату на основе года, месяца и дня (включая -1 и -2).
+func calculateDate(year, month, day int) time.Time {
+	// Определяем количество дней в месяце
+	lastDay := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC).Day() - 1
+	var targetDay int
+	if day > 0 {
+		targetDay = day
+	} else if day == -1 {
+		targetDay = lastDay
+	} else if day == -2 {
+		targetDay = lastDay + day + 1 // Для -2
+	}
+
+	// Проверяем, что день в допустимых пределах
+	if targetDay < 1 || targetDay > lastDay {
+		return time.Time{} // Возвращаем "нулевую" дату, если недопустимо
+	}
+
+	// Возвращаем рассчитанную дату
+	return time.Date(year, time.Month(month), targetDay, 0, 0, 0, 0, time.UTC)
 }

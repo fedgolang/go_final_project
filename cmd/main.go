@@ -21,5 +21,8 @@ func main() {
 	// На chi не получилось просто прокинуть FileServer, без StripPrefix он не видит css и js
 	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(cfg.WebDir))))
 
+	r.Post("/api/task")
+
 	http.ListenAndServe(cfg.HTTPAdress, r)
+
 }
