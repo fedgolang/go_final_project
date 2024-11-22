@@ -56,6 +56,13 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return "", fmt.Errorf("превышен максимально допустимый интервал количества дней")
 		}
 
+		// Если мы получили value = 1, то задача ежедневная по ТЗ
+		// d 1 — каждый день;
+		if valueInt == 1 {
+			nextDate = fmt.Sprint(time.Now().Format("20060102"))
+			return nextDate, nil
+		}
+
 		// Необходимо отдельное условие для событий
 		// Когда date уже больше чем now
 		if dateParse.After(now) {
