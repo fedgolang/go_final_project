@@ -35,7 +35,7 @@ func NewScheduler(DBPath string) (*Scheduler, *sql.DB) {
 	if install {
 		query_create := `CREATE TABLE scheduler(
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			date DATE, 
+			date VARCHAR(255), 
 			title VARCHAR(255),
 			comment VARCHAR(255),
 			repeat VARCHAR(126)
