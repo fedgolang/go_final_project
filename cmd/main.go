@@ -25,6 +25,9 @@ func main() {
 	// Хендлер на добавление таски
 	r.Post("/api/task", handlers.PostTask(s))
 
+	// Хендлер для вывода ближайших задач
+	r.Get("/api/tasks", handlers.GetTasks(s))
+
 	http.ListenAndServe(cfg.HTTPAdress, r)
 
 }

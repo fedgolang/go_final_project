@@ -11,13 +11,24 @@ type Scheduler struct {
 }
 
 type Task struct {
+	ID      string `json:"id"`
 	Date    string `json:"date,omitempty"`
 	Title   string `json:"title"`
 	Comment string `json:"comment,omitempty"`
 	Repeat  string `json:"repeat,omitempty"`
 }
 
-// Функция открытия коннекта к БД
+// Не нашел более логичного решения проблемы, что нам иногда нужны все поля
+// Вне зависимости, пустые они или нет
+type TaskNoEmpty struct {
+	ID      string `json:"id"`
+	Date    string `json:"date"`
+	Title   string `json:"title"`
+	Comment string `json:"comment"`
+	Repeat  string `json:"repeat"`
+}
+
+// Функция открытия коннекта и создания БД, если её нет
 func NewScheduler(DBPath string) (*Scheduler, *sql.DB) {
 	// Проверим, что файлик с БД существует
 	_, err := os.Stat(DBPath)
@@ -57,6 +68,7 @@ func NewScheduler(DBPath string) (*Scheduler, *sql.DB) {
 
 }
 
+// Функция инсерта в БД таски
 func (s *Scheduler) PostTask(task Task) (int, error) {
 	stmt, err := s.db.Prepare("INSERT INTO scheduler(date, title, comment, repeat) values(?,?,?,?)")
 	if err != nil {
@@ -75,4 +87,30 @@ func (s *Scheduler) PostTask(task Task) (int, error) {
 	}
 
 	return int(id), nil
+}
+
+// Функция для запроса у БД лимитированное кол-во тасок, ближайшее к текущей дате
+func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
+	// Производим выборку данных из БД, сортированных по возрастанию даты
+	// Так же дата должна быть больше сегодняшней, так как ищем ближайшие задачи
+	// И ограничиваем лимитом, он нам приходит как аргумент limit
+	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
+		"FROM scheduler WHERE date >= ? " +
+		"ORDER BY date ASC " +
+		"LIMIT ? ")
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Query(today, limit)
+	// Обработаем ошибку отсутствия строк, иначе рухнем с err
+	if err == sql.ErrNoRows {
+		return res, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+
 }
