@@ -73,7 +73,7 @@ func PostTask(s *storage.Scheduler) http.HandlerFunc {
 		} else { // Если не пустое повторение, вычислим следующую дату из NextDate()
 			task.Date, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
 			if err != nil {
-				resp.Err = "Дата представлена в формате, отличном от ожидаемого"
+				resp.Err = fmt.Sprint(err)
 			}
 		}
 

@@ -63,15 +63,17 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return nextDate, nil
 		}
 
-		// Запустим цикл, который будет добавлять к дате наш интервал,
-		// пока дата не перерастёт now
+		// Уберём лишнее из time.Time
+		now = now.Truncate(24 * time.Hour)
+		dateParse = dateParse.Truncate(24 * time.Hour)
+
+		// Запустим цикл, который будет добавлять к дате наш интервал
 		for {
-			// Сразу добавляем интервал
-			dateParse = dateParse.AddDate(0, 0, valueInt)
-			// Если старт позже чем now - выходим
-			if dateParse.After(now) {
+			if dateParse.After(now) || dateParse.Equal(now) {
 				break
 			}
+			// Сразу добавляем интервал
+			dateParse = dateParse.AddDate(0, 0, valueInt)
 		}
 
 		nextDate = dateParse.Format("20060102")
@@ -109,6 +111,15 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			today = 7
 		}
 
+		// Отдельно сделаем проверку на завтрашний день
+		// Чтобы не упасть на today + 1 в воскресенье
+		var tomorrow int
+		if today == 7 {
+			tomorrow = 1
+		} else {
+			tomorrow = today + 1
+		}
+
 		// Разобьем значение value, в случае, если там более 1 значения
 		week := strings.Split(value, ",")
 
@@ -140,7 +151,7 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 		// Пройдем по слайсу, сколько бы значений не было, начинаем с завтра
 		// Создал итератор так как к i привязываться нельзя из-за старта today + 1
 		j := 1
-		for i := today + 1; i < 8; i++ {
+		for i := tomorrow; i < 8; i++ {
 			if search(i, weekInts) {
 				nextDate = fmt.Sprint(dateStart.AddDate(0, 0, j).Format("20060102"))
 				break
