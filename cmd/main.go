@@ -25,6 +25,9 @@ func main() {
 	// Хендлер на добавление таски
 	r.Post("/api/task", handlers.PostTask(s))
 
+	// Хендлер для вычисления следующей даты
+	r.Get("/api/nextdate", handlers.NextDateHand)
+
 	// Хендлер для вывода ближайших задач
 	r.Get("/api/tasks", handlers.GetTasks(s))
 

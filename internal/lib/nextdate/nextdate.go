@@ -56,13 +56,6 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return "", fmt.Errorf("превышен максимально допустимый интервал количества дней")
 		}
 
-		// Если мы получили value = 1, то задача ежедневная по ТЗ
-		// d 1 — каждый день;
-		if valueInt == 1 {
-			nextDate = fmt.Sprint(time.Now().Format("20060102"))
-			return nextDate, nil
-		}
-
 		// Необходимо отдельное условие для событий
 		// Когда date уже больше чем now
 		if dateParse.After(now) {
@@ -136,16 +129,24 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			}
 		}
 
+		// Узнаем откуда нам производить отсчёт
+		var dateStart time.Time
+		if dateParse.After(now) {
+			dateStart = dateParse
+		} else {
+			dateStart = now
+		}
+
 		// Пройдем по слайсу, сколько бы значений не было, начинаем с завтра
 		// Создал итератор так как к i привязываться нельзя из-за старта today + 1
 		j := 1
 		for i := today + 1; i < 8; i++ {
 			if search(i, weekInts) {
-				nextDate = fmt.Sprint(dateParse.AddDate(0, 0, j).Format("20060102"))
+				nextDate = fmt.Sprint(dateStart.AddDate(0, 0, j).Format("20060102"))
 				break
 			}
 			if i == 7 {
-				i = 1
+				i = 0
 			}
 			j++
 		}
@@ -184,14 +185,25 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 		intDaysOfMonth := []int{}
 		for _, day := range daysOfMonth {
 			intDay, err := strconv.Atoi(day)
-			if err != nil {
+			if err != nil || intDay > 31 || intDay < -2 {
 				return "", err
 			}
 
 			intDaysOfMonth = append(intDaysOfMonth, intDay)
 		}
 
-		nextDate = fmt.Sprint(findNextDate(now, intDaysOfMonth, intMonths))
+		// Узнаем откуда нам производить отсчёт
+		var dateStart time.Time
+		if dateParse.After(now) {
+			dateStart = dateParse
+		} else {
+			dateStart = now
+		}
+		nextDate = findNextDate(dateStart, intDaysOfMonth, intMonths).Format("20060102")
+		// Если не нашлось кандидатов и нам вернулся дефолтный time.Time, значит ошибка
+		if nextDate == "00010101" {
+			return "", nil
+		}
 	default:
 		return "", fmt.Errorf("неверный формат repeat")
 	}
@@ -262,14 +274,14 @@ func findNextDate(now time.Time, days, months []int) time.Time {
 // calculateDate вычисляет дату на основе года, месяца и дня (включая -1 и -2).
 func calculateDate(year, month, day int) time.Time {
 	// Определяем количество дней в месяце
-	lastDay := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.Local).Day() - 1
+	lastDay := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.Local).Day()
 	var targetDay int
 	if day > 0 {
 		targetDay = day
 	} else if day == -1 {
 		targetDay = lastDay
 	} else if day == -2 {
-		targetDay = lastDay + day + 1 // Для -2
+		targetDay = lastDay - 1
 	}
 
 	// Проверяем, что день в допустимых пределах
