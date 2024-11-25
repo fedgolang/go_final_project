@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -104,6 +105,7 @@ func PostTask(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
+// Ручка, чтобы отдельно дёрнуть проверку даты
 func NextDateHand(w http.ResponseWriter, r *http.Request) {
 	// Объявим переменные и достанем параметры
 	resp := ""
@@ -162,19 +164,19 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 				err := dbRows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 				if err != nil {
 					resp.Err = "ошибка при чтении данных"
-				}
-
-				// Если в поиске дата, ищем по дате
-				if okDate {
-					if searchDate == task.Date {
+				} else {
+					// Если в поиске дата, ищем по дате
+					if okDate {
+						if searchDate == task.Date {
+							tasks.Tasks = append(tasks.Tasks, task)
+						}
+					} else if search != "" { // Если не дата, будем фильтровать по комменту и заголовку
+						if strings.Contains(task.Comment, search) || strings.Contains(task.Title, search) {
+							tasks.Tasks = append(tasks.Tasks, task)
+						}
+					} else { // Если параметра нет, выводим всё
 						tasks.Tasks = append(tasks.Tasks, task)
 					}
-				} else if search != "" { // Если не дата, будем фильтровать по комменту и заголовку
-					if strings.Contains(task.Comment, search) || strings.Contains(task.Title, search) {
-						tasks.Tasks = append(tasks.Tasks, task)
-					}
-				} else { // Если параметра нет, выводим всё
-					tasks.Tasks = append(tasks.Tasks, task)
 				}
 			}
 		}
@@ -183,9 +185,124 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 		// Если есть, вернём ошибку, если нет, вернём таски
 		if resp.Err != "" {
 			JSONResp, err = json.Marshal(resp)
+			if err != nil {
+				http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+				return
+			}
 		} else {
 			JSONResp, err = json.Marshal(tasks)
+			if err != nil {
+				http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+				return
+			}
 		}
+
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	}
+}
+
+// Функция, возвращающая нам хендлер, чтобы тут работать с БД
+// Хендлер отвечает за поиск по ID таски в БД
+func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var JSONResp []byte
+		task := storage.TaskNoEmpty{}
+		resp := Response{}
+
+		// Достанем с урла ID таски
+		taskID := r.URL.Query().Get("id")
+
+		// Если запрос пришел без параметра id, не запускаем запрос к БД
+		// Прокидываем ошибку
+		if taskID == "" {
+			resp.Err = "Не указан идентификатор"
+		} else {
+			// Если же id есть, идём в БД искать таску, она должна быть одна
+			err := s.GetTaskByID(taskID).Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+			// Если по необходимому id нет задач, запишем ошибку
+			if err == sql.ErrNoRows {
+				resp.Err = "Задача не найдена"
+			}
+		}
+
+		// Проверим, есть ли ошибки
+		// Если есть, вернём JSON с ошибкой
+		if resp.Err != "" {
+			var err error
+			JSONResp, err = json.Marshal(resp)
+			if err != nil {
+				http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+				return
+			}
+		} else { // Если нет, то вернём найденную таску
+			var err error
+			JSONResp, err = json.Marshal(task)
+			if err != nil {
+				http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	}
+}
+
+func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var JSONResp []byte
+		task := storage.Task{}
+		resp := Response{}
+		var buf bytes.Buffer
+
+		// Читаем данные из тела и запишем в буфер
+		_, err := buf.ReadFrom(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest) // Вернём 400 если не смогли прочитать боди
+			return
+		}
+
+		// Расшифруем JSON
+		err = json.Unmarshal(buf.Bytes(), &task)
+		if err != nil {
+			resp.Err = "Ошибка десериализации JSON"
+		}
+
+		// Проверим, что заголовок не пустой
+		if task.Title == "" {
+			resp.Err = "Не указан заголовок задачи" // 400 пришел пустой title
+		}
+
+		// Проверим, что дата не пустая
+		if task.Date == "" {
+			task.Date = time.Now().Format("20060102")
+		}
+
+		// Проверим, что формат даты ожидаемый
+		_, err = time.Parse("20060102", task.Date)
+		if err != nil {
+			resp.Err = fmt.Sprint(err)
+		}
+
+		// Так как проверка repeat у нас внутри NextDate
+		// Запустим функцию без сохранения переменной для проверки на ошибки
+		_, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
+		if err != nil {
+			resp.Err = fmt.Sprint(err)
+		}
+
+		if resp.Err == "" {
+			err := s.EditTask(task)
+			if err == fmt.Errorf("нет записи") {
+				resp.Err = "Задача не найдена"
+			} else if err != nil {
+				resp.Err = "Возникла проблема с изменением задачи"
+			}
+		}
+
+		JSONResp, err = json.Marshal(resp)
 		if err != nil {
 			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
 			return

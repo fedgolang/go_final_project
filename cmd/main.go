@@ -28,8 +28,14 @@ func main() {
 	// Хендлер для вычисления следующей даты
 	r.Get("/api/nextdate", handlers.NextDateHand)
 
-	// Хендлер для вывода ближайших задач
+	// Хендлер для вывода ближайших тасок
 	r.Get("/api/tasks", handlers.GetTasks(s))
+
+	// Хендлер для вывода таски по ID
+	r.Get("/api/task", handlers.GetDataForEdit(s))
+
+	// Хендлер для редактирования таски
+	r.Put("/api/task", handlers.PutDataByID(s))
 
 	http.ListenAndServe(cfg.HTTPAdress, r)
 

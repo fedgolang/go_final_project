@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 )
@@ -18,8 +19,9 @@ type Task struct {
 	Repeat  string `json:"repeat,omitempty"`
 }
 
-// Не нашел более логичного решения проблемы, что нам иногда нужны все поля
+// Не надумал более логичного решения проблемы, что нам иногда нужны все поля
 // Вне зависимости, пустые они или нет
+// Поэтому костыльный дубль структуры выше без omitempty
 type TaskNoEmpty struct {
 	ID      string `json:"id"`
 	Date    string `json:"date"`
@@ -113,4 +115,52 @@ func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
 
 	return res, nil
 
+}
+
+// Функция поиска в БД таски по ID
+func (s Scheduler) GetTaskByID(id string) *sql.Row {
+	// Подготовим запрос к БД
+	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
+		"FROM scheduler WHERE id =?")
+	if err != nil {
+		return nil
+	}
+	defer stmt.Close()
+
+	// Так как id ключ с автоинкрементом, задача всегда будет одна
+	// Поэтому пользуемся QueryRow
+	res := stmt.QueryRow(id)
+
+	return res
+}
+
+func (s *Scheduler) EditTask(task Task) error {
+	// Подготовим запрос к БД
+	stmt, err := s.db.Prepare("UPDATE scheduler SET " +
+		"date =?, " +
+		"title =?, " +
+		"comment =?, " +
+		"repeat =? " +
+		"WHERE id =? ")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(task.Date, task.Title, task.Comment, task.Repeat, task.ID)
+	if err != nil {
+		return err
+	}
+
+	// Проверяем количество затронутых строк
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("нет записи")
+	}
+
+	return nil
 }
