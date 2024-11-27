@@ -164,3 +164,30 @@ func (s *Scheduler) EditTask(task Task) error {
 
 	return nil
 }
+
+func (s *Scheduler) DeleteTaskByID(id string) error {
+	// Подготовим запрос к БД
+	stmt, err := s.db.Prepare("DELETE FROM scheduler WHERE id=?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(id)
+	if err != nil {
+		return err
+	}
+
+	// Проверяем количество затронутых строк
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("нет записи")
+	}
+
+	return nil
+
+}

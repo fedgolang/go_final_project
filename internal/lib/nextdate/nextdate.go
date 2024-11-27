@@ -56,6 +56,15 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return "", fmt.Errorf("превышен максимально допустимый интервал количества дней")
 		}
 
+		// Проверим на каждодневность
+		// Если дата < чем сейчас, перенесём на сегодня
+		if valueInt == 1 && dateParse.Before(now) {
+			return fmt.Sprint(now.Format("20060102")), nil
+		} else if valueInt == 1 && dateParse.After(now) {
+			// Если > чем сейчас, перенос на следующий день
+			return fmt.Sprint(dateParse.AddDate(0, 0, valueInt).Format("20060102")), nil
+		}
+
 		// Необходимо отдельное условие для событий
 		// Когда date уже больше чем now
 		if dateParse.After(now) {
@@ -63,16 +72,12 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return nextDate, nil
 		}
 
-		// Уберём лишнее из time.Time
-		now = now.Truncate(24 * time.Hour)
-		dateParse = dateParse.Truncate(24 * time.Hour)
-
 		// Запустим цикл, который будет добавлять к дате наш интервал
 		for {
-			if dateParse.After(now) || dateParse.Equal(now) {
+			if dateParse.After(now) {
 				break
 			}
-			// Сразу добавляем интервал
+			// Добавляем интервал
 			dateParse = dateParse.AddDate(0, 0, valueInt)
 		}
 

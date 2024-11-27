@@ -37,6 +37,12 @@ func main() {
 	// Хендлер для редактирования таски
 	r.Put("/api/task", handlers.PutDataByID(s))
 
+	// Хендлер для выполнения таски
+	r.Post("/api/task/done", handlers.TaskDone(s))
+
+	// Хендлер для удаления таски
+	r.Delete("/api/task", handlers.DeleteTask(s))
+
 	http.ListenAndServe(cfg.HTTPAdress, r)
 
 }

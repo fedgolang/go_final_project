@@ -72,9 +72,11 @@ func PostTask(s *storage.Scheduler) http.HandlerFunc {
 				task.Date = time.Now().Format("20060102")
 			}
 		} else { // Если не пустое повторение, вычислим следующую дату из NextDate()
-			task.Date, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
-			if err != nil {
-				resp.Err = fmt.Sprint(err)
+			if time.Now().Format("20060102") != task.Date {
+				task.Date, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
+				if err != nil {
+					resp.Err = fmt.Sprint(err)
+				}
 			}
 		}
 
@@ -250,6 +252,8 @@ func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
+// Функция, возвращающая нам хендлер, чтобы тут работать с БД
+// Хендлер отвечает за редактирование таски
 func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var JSONResp []byte
@@ -293,6 +297,7 @@ func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 			resp.Err = fmt.Sprint(err)
 		}
 
+		// Отправим таску на апдейт в БД, если ошибок нет
 		if resp.Err == "" {
 			err := s.EditTask(task)
 			if err == fmt.Errorf("нет записи") {
@@ -302,7 +307,98 @@ func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 			}
 		}
 
+		// Так как нам не надо возвращать таску после апдейта
+		// Просто сериализуем структуру resp
+		// Она нам и вернёт ошибку при наличии, либо пустой ответ при успехе
 		JSONResp, err = json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	}
+}
+
+// Функция, возвращающая нам хендлер, чтобы тут работать с БД
+// Хендлер отвечает за обработку таски как выполненной
+func TaskDone(s *storage.Scheduler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var JSONResp []byte
+		task := storage.Task{}
+		resp := Response{}
+
+		taskID := r.URL.Query().Get("id")
+
+		// Если запрос пришел без параметра id, не запускаем запрос к БД
+		// Прокидываем ошибку
+		if taskID == "" {
+			resp.Err = "Не указан идентификатор"
+		} else {
+			// Если же id есть, идём в БД искать таску, она должна быть одна
+			err := s.GetTaskByID(taskID).Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+			// Если по необходимому id нет задач, запишем ошибку
+			if err == sql.ErrNoRows {
+				resp.Err = "Задача не найдена"
+			}
+		}
+
+		// Если нет ошибок, обращаемся к БД
+		if resp.Err == "" {
+			// Если правил повторения нет, просто удаляем задачу
+			if task.Repeat == "" {
+				err := s.DeleteTaskByID(taskID)
+				if err != nil {
+					resp.Err = fmt.Sprint(err)
+				}
+			} else {
+				// Если есть правило, вычислим дату
+				nextDate, err := nd.NextDate(time.Now(), task.Date, task.Repeat)
+				if err != nil {
+					resp.Err = fmt.Sprint(err)
+				} else {
+					// Проблем при вычислении даты не возникло, присвоим новую дату и отправим на изменение
+					task.Date = nextDate
+					err = s.EditTask(task)
+					if err != nil {
+						resp.Err = fmt.Sprint(err)
+					}
+				}
+			}
+		}
+		// Подготовим ответ, он либо пустой, либо ошибка
+		JSONResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	}
+}
+
+func DeleteTask(s *storage.Scheduler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var JSONResp []byte
+		resp := Response{}
+
+		taskID := r.URL.Query().Get("id")
+
+		if taskID == "" {
+			resp.Err = "Не указан идентификатор"
+		} else {
+			err := s.DeleteTaskByID(taskID)
+			if err != nil {
+				resp.Err = fmt.Sprint(err)
+			}
+		}
+
+		// Подготовим ответ, он либо пустой, либо ошибка
+		JSONResp, err := json.Marshal(resp)
 		if err != nil {
 			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
 			return
