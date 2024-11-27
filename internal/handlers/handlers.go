@@ -451,7 +451,8 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 	// Проверим, есть ли в окружении пароль
 	envPass := os.Getenv("TODO_PASSWORD")
 	if envPass == "" {
-		resp.Err = "Пароль не установлен"
+		// Если нет, прокинем локально
+
 	}
 
 	// Совпадают ли пароли из тела и окружения
@@ -485,6 +486,8 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write(JSONResp)
+		// Специальный вывод токена для простоты его отслеживания
+		fmt.Println(resp.Token)
 	} else {
 		// Подготовим ответ, если токена нет, возвращаем ошибку
 		JSONResp, err := json.Marshal(resp)

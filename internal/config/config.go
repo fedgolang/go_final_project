@@ -15,6 +15,7 @@ type Config struct {
 func Load() *Config {
 	var cfg Config
 
+	// Прокинем проверки, если нет переменных окружения, то запуск локальный
 	// Звёздочка, прокинем порт в енв
 	todoPort := os.Getenv("TODO_PORT")
 	if todoPort != "8080" { // Если прокинуть не смогли, запишем порт напрямую
@@ -31,7 +32,17 @@ func Load() *Config {
 		cfg.DBPath = os.Getenv("TODO_DBFILE")
 	}
 
-	cfg.WebDir = "/app/web"
+	webDir := os.Getenv("TODO_WEBDIR")
+	if webDir != "/app/web" {
+		cfg.WebDir = "../web"
+	} else {
+		cfg.WebDir = "/app/web"
+	}
+
+	JWTPass := os.Getenv("TODO_PASSWORD")
+	if JWTPass == "" {
+		_ = os.Setenv("TODO_PASSWORD", "JWT_PASS789")
+	}
 
 	return &cfg
 }
