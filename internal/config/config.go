@@ -16,22 +16,22 @@ func Load() *Config {
 	var cfg Config
 
 	// Звёздочка, прокинем порт в енв
-	err := os.Setenv("TODO_PORT", "8080")
-	if err != nil { // Если прокинуть не смогли, запишем порт напрямую
+	todoPort := os.Getenv("TODO_PORT")
+	if todoPort != "8080" { // Если прокинуть не смогли, запишем порт напрямую
 		cfg.HTTPAdress = fmt.Sprintf("localhost:%s", "8080")
 	} else { // Если получилось прокинуть, запускаемся по переменной окружения
-		cfg.HTTPAdress = fmt.Sprintf("localhost:%s", os.Getenv("TODO_PORT"))
+		cfg.HTTPAdress = fmt.Sprintf("0.0.0.0:%s", os.Getenv("TODO_PORT"))
 	}
 
 	// Звёздочка, прокинем путь к БД в енв
-	err = os.Setenv("TODO_DBFILE", "../scheduler.db")
-	if err != nil { // Если прокинуть не смогли, запишем путь напрямую
+	todoDBfile := os.Getenv("TODO_DBFILE")
+	if todoDBfile != "/app/scheduler.db" { // Если прокинуть не смогли, запишем путь напрямую
 		cfg.DBPath = "../scheduler.db"
 	} else { // Если получилось прокинуть, впишем в путь переменную окружения
 		cfg.DBPath = os.Getenv("TODO_DBFILE")
 	}
 
-	cfg.WebDir = "../web"
+	cfg.WebDir = "/app/web"
 
 	return &cfg
 }

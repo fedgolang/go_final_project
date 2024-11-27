@@ -23,25 +23,28 @@ func main() {
 	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(cfg.WebDir))))
 
 	// Хендлер на добавление таски
-	r.Post("/api/task", handlers.PostTask(s))
+	r.Post("/api/task", handlers.AuthMiddleware(handlers.PostTask(s)))
 
 	// Хендлер для вычисления следующей даты
 	r.Get("/api/nextdate", handlers.NextDateHand)
 
 	// Хендлер для вывода ближайших тасок
-	r.Get("/api/tasks", handlers.GetTasks(s))
+	r.Get("/api/tasks", handlers.AuthMiddleware(handlers.GetTasks(s)))
 
 	// Хендлер для вывода таски по ID
-	r.Get("/api/task", handlers.GetDataForEdit(s))
+	r.Get("/api/task", handlers.AuthMiddleware(handlers.GetDataForEdit(s)))
 
 	// Хендлер для редактирования таски
-	r.Put("/api/task", handlers.PutDataByID(s))
+	r.Put("/api/task", handlers.AuthMiddleware(handlers.PutDataByID(s)))
 
 	// Хендлер для выполнения таски
-	r.Post("/api/task/done", handlers.TaskDone(s))
+	r.Post("/api/task/done", handlers.AuthMiddleware(handlers.TaskDone(s)))
 
 	// Хендлер для удаления таски
-	r.Delete("/api/task", handlers.DeleteTask(s))
+	r.Delete("/api/task", handlers.AuthMiddleware(handlers.DeleteTask(s)))
+
+	// Хендлер для аутентификации
+	r.Post("/api/signin", handlers.SignInHandler)
 
 	http.ListenAndServe(cfg.HTTPAdress, r)
 

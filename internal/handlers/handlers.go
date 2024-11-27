@@ -6,17 +6,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	nd "github.com/fedgolang/go_final_project/internal/lib/nextdate"
 	"github.com/fedgolang/go_final_project/internal/storage"
+	"github.com/golang-jwt/jwt"
 )
 
 var (
-	limitForTasks = 50 // Максимальное кол-во возвращаемых тасков в GetTasks
+	limitForTasks = 50                                                                         // Максимальное кол-во возвращаемых тасков в GetTasks
+	JWTSecret     = []byte("69612fb755d66b4a275896981874c46210f4afbac7673bcb0ce40d3c6a0160d5") // Секрет для токена
 )
+
+type SignInRequest struct {
+	Password string `json:"password"`
+}
+
+type SignInResponse struct {
+	Token string `json:"token,omitempty"`
+	Err   string `json:"error,omitempty"`
+}
 
 // Структура для ответа после POST
 type Response struct {
@@ -30,7 +42,8 @@ type TasksResponse struct {
 	Tasks []storage.TaskNoEmpty `json:"tasks"`
 }
 
-// Функция, возвращающая нам хендлер, чтобы тут работать с БД
+// Для реализации всех хендлеров будем пользоваться middleware
+
 // Хендлер отвечает за добавление таски в БД
 func PostTask(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +85,8 @@ func PostTask(s *storage.Scheduler) http.HandlerFunc {
 				task.Date = time.Now().Format("20060102")
 			}
 		} else { // Если не пустое повторение, вычислим следующую дату из NextDate()
+			// Доп проверка, если таска добавляется сегодня с датой = сегодня
+			// То не учитываем NextDate и регаем таску с датой = сегодня
 			if time.Now().Format("20060102") != task.Date {
 				task.Date, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
 				if err != nil {
@@ -138,7 +153,6 @@ func NextDateHand(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(resp))
 }
 
-// Функция, возвращающая нам хендлер, чтобы тут работать с БД
 // Хендлер отвечает за возвращение набора тасок
 func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +219,6 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
-// Функция, возвращающая нам хендлер, чтобы тут работать с БД
 // Хендлер отвечает за поиск по ID таски в БД
 func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +265,6 @@ func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
-// Функция, возвращающая нам хендлер, чтобы тут работать с БД
 // Хендлер отвечает за редактирование таски
 func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +334,6 @@ func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
-// Функция, возвращающая нам хендлер, чтобы тут работать с БД
 // Хендлер отвечает за обработку таски как выполненной
 func TaskDone(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +392,7 @@ func TaskDone(s *storage.Scheduler) http.HandlerFunc {
 	}
 }
 
+// Хендлер отвечает за удаление таски из БД
 func DeleteTask(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var JSONResp []byte
@@ -407,6 +419,124 @@ func DeleteTask(s *storage.Scheduler) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write(JSONResp)
+	}
+}
+
+// Хендлер аутентификации
+func SignInHandler(w http.ResponseWriter, r *http.Request) {
+	// Для аутентификации поставим проверку на метод
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Достанем пароль
+	var buf bytes.Buffer
+	var req SignInRequest
+	var resp SignInResponse
+
+	// Читаем данные из тела и запишем в буфер
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest) // Вернём 400 если не смогли прочитать боди
+		return
+	}
+
+	// Расшифруем JSON
+	err = json.Unmarshal(buf.Bytes(), &req)
+	if err != nil {
+		resp.Err = "Ошибка десериализации JSON"
+	}
+
+	// Проверим, есть ли в окружении пароль
+	envPass := os.Getenv("TODO_PASSWORD")
+	if envPass == "" {
+		resp.Err = "Пароль не установлен"
+	}
+
+	// Совпадают ли пароли из тела и окружения
+	if req.Password != envPass {
+		resp.Err = "Неверный пароль"
+	}
+
+	if resp.Err == "" {
+		// Формируем токен из секрета
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"passwordHash": fmt.Sprintf("%x", JWTSecret),
+			"exp":          time.Now().Add(8 * time.Hour).Unix(),
+		})
+
+		// Подписываем токен
+		tokenString, err := token.SignedString(JWTSecret)
+		if err != nil {
+			resp.Err = "Ошибка при создании токена"
+		}
+		resp.Token = tokenString
+	}
+
+	if resp.Token != "" {
+		// Подготовим ответ, если токен сформировали
+		JSONResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	} else {
+		// Подготовим ответ, если токена нет, возвращаем ошибку
+		JSONResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError) // 500 не смогли записать ответ
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(JSONResp)
+	}
+}
+
+// middleware для аутентификации
+func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		expectedPassword := os.Getenv("TODO_PASSWORD")
+		if expectedPassword == "" {
+			next(w, r)
+			return
+		}
+
+		// Получаем куку
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			return
+		}
+
+		// Парсим токен
+		token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("неверный метод подписи: %v", t.Header["alg"])
+			}
+			return JWTSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			return
+		}
+
+		// Проверяем хэш пароля
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok || claims["passwordHash"] != fmt.Sprintf("%x", JWTSecret) {
+			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			return
+		}
+
+		// Если всё хорошо, вызываем следующий обработчик
+		next(w, r)
 	}
 }
 
