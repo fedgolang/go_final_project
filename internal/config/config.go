@@ -27,7 +27,7 @@ func Load() *Config {
 	// Звёздочка, достанем путь к БД из енв
 	todoDBfile := os.Getenv("TODO_DBFILE")
 	if todoDBfile == "" { // Если прокинуть не смогли, запишем путь напрямую
-		cfg.DBPath = "../scheduler.db"
+		cfg.DBPath = "./scheduler.db"
 	} else { // Если получилось прокинуть, впишем в путь переменную окружения
 		cfg.DBPath = os.Getenv("TODO_DBFILE")
 	}
@@ -36,7 +36,7 @@ func Load() *Config {
 	// Если контейнер, web в /app/web
 	webDir := os.Getenv("TODO_WEBDIR")
 	if webDir == "" {
-		cfg.WebDir = "../web"
+		cfg.WebDir = "./web"
 	} else {
 		cfg.WebDir = "/app/web"
 	}
