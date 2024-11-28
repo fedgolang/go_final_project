@@ -452,10 +452,6 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Проверим, есть ли в окружении пароль
 	envPass := os.Getenv("TODO_PASSWORD")
-	if envPass == "" {
-		// Если нет, прокинем локально
-
-	}
 
 	// Совпадают ли пароли из тела и окружения
 	if req.Password != envPass {
@@ -507,12 +503,6 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 // middleware для аутентификации
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expectedPassword := os.Getenv("TODO_PASSWORD")
-		if expectedPassword == "" {
-			next(w, r)
-			return
-		}
-
 		// Получаем куку
 		cookie, err := r.Cookie("token")
 		if err != nil {
