@@ -506,27 +506,27 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Получаем куку
 		cookie, err := r.Cookie("token")
 		if err != nil {
-			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			http.Error(w, "auth required", http.StatusUnauthorized)
 			return
 		}
 
 		// Парсим токен
 		token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("неверный метод подписи: %v", t.Header["alg"])
+				return nil, fmt.Errorf("wrong sign method: %v", t.Header["alg"])
 			}
 			return JWTSecret, nil
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			http.Error(w, "auth required", http.StatusUnauthorized)
 			return
 		}
 
 		// Проверяем хэш пароля
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok || claims["passwordHash"] != fmt.Sprintf("%x", JWTSecret) {
-			http.Error(w, "Необходимо авторизоваться", http.StatusUnauthorized)
+			http.Error(w, "auth required", http.StatusUnauthorized)
 			return
 		}
 
