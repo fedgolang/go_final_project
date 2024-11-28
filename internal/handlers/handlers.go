@@ -85,9 +85,9 @@ func PostTask(s *storage.Scheduler) http.HandlerFunc {
 				task.Date = time.Now().Format("20060102")
 			}
 		} else { // Если не пустое повторение, вычислим следующую дату из NextDate()
-			// Доп проверка, если таска добавляется сегодня с датой = сегодня
-			// То не учитываем NextDate и регаем таску с датой = сегодня
-			if time.Now().Format("20060102") != task.Date {
+			// Доп проверка, если таска добавляется сегодня с датой > сегодня
+			// То не учитываем NextDate и регаем таску с датой = дате создания
+			if date.Truncate(24 * time.Hour).Before(time.Now().Truncate(24 * time.Hour)) {
 				task.Date, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
 				if err != nil {
 					resp.Err = fmt.Sprint(err)
