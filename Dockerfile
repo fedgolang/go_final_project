@@ -1,4 +1,4 @@
-# Для запуска имейджа: docker run -d  -p 8080:8080 github.com/fedgolang/go_final_project
+# Для запуска имейджа: docker run -d  -p 7540:7540 github.com/fedgolang/go_final_project
 FROM golang:latest AS builder
 
 WORKDIR /app
@@ -21,7 +21,7 @@ COPY --from=builder /app/web ./web
 
 EXPOSE 8080
 
-ENV TODO_PORT=8080 \
+ENV TODO_PORT=7540 \
     TODO_DBFILE=/app/scheduler.db \
     TODO_PASSWORD=JWT_PASS789
 

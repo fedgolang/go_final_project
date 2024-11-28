@@ -304,9 +304,11 @@ func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 
 		// Так как проверка repeat у нас внутри NextDate
 		// Запустим функцию без сохранения переменной для проверки на ошибки
-		_, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
-		if err != nil {
-			resp.Err = fmt.Sprint(err)
+		if task.Repeat != "" {
+			_, err = nd.NextDate(time.Now(), task.Date, task.Repeat)
+			if err != nil {
+				resp.Err = fmt.Sprint(err)
+			}
 		}
 
 		// Отправим таску на апдейт в БД, если ошибок нет
