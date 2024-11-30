@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/fedgolang/go_final_project/internal/config"
@@ -45,6 +46,8 @@ func main() {
 
 	// Хендлер для аутентификации
 	r.Post("/api/signin", handlers.SignInHandler)
+
+	log.Printf("Сервис запущен по адресу: %s", cfg.HTTPAdress)
 
 	http.ListenAndServe(cfg.HTTPAdress, r)
 

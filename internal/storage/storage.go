@@ -80,12 +80,12 @@ func (s *Scheduler) PostTask(task Task) (int, error) {
 
 	res, err := stmt.Exec(task.Date, task.Title, task.Comment, task.Repeat)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("ошибка при попытке добавить таску в БД: %s", err)
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("ошибка при попытке добавить таску в БД: %s", err)
 	}
 
 	return int(id), nil
@@ -101,7 +101,7 @@ func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
 		"ORDER BY date ASC " +
 		"LIMIT ? ")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ошибка при выводе задач из БД: %s", err)
 	}
 	defer stmt.Close()
 
@@ -110,7 +110,7 @@ func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
 	if err == sql.ErrNoRows {
 		return res, nil
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ошибка при выводе задач из БД: %s", err)
 	}
 
 	return res, nil
@@ -118,12 +118,12 @@ func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
 }
 
 // Функция поиска в БД таски по ID
-func (s Scheduler) GetTaskByID(id string) *sql.Row {
+func (s Scheduler) GetTaskByID(id string) (*sql.Row, error) {
 	// Подготовим запрос к БД
 	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
 		"FROM scheduler WHERE id =?")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("ошибка при попытке найти задание в БД: %s", err)
 	}
 	defer stmt.Close()
 
@@ -131,7 +131,7 @@ func (s Scheduler) GetTaskByID(id string) *sql.Row {
 	// Поэтому пользуемся QueryRow
 	res := stmt.QueryRow(id)
 
-	return res
+	return res, nil
 }
 
 func (s *Scheduler) EditTask(task Task) error {
@@ -143,23 +143,23 @@ func (s *Scheduler) EditTask(task Task) error {
 		"repeat =? " +
 		"WHERE id =? ")
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке изменить задачу: %s", err)
 	}
 	defer stmt.Close()
 
 	res, err := stmt.Exec(task.Date, task.Title, task.Comment, task.Repeat, task.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке изменить задачу: %s", err)
 	}
 
 	// Проверяем количество затронутых строк
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке изменить задачу: %s", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("нет записи")
+		return sql.ErrNoRows
 	}
 
 	return nil
@@ -169,23 +169,23 @@ func (s *Scheduler) DeleteTaskByID(id string) error {
 	// Подготовим запрос к БД
 	stmt, err := s.db.Prepare("DELETE FROM scheduler WHERE id=?")
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке удалить задачу: %s", err)
 	}
 	defer stmt.Close()
 
 	res, err := stmt.Exec(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке удалить задачу: %s", err)
 	}
 
 	// Проверяем количество затронутых строк
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка при попытке удалить задачу: %s", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("нет записи")
+		return sql.ErrNoRows
 	}
 
 	return nil
