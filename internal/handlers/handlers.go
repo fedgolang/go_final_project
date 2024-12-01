@@ -188,7 +188,6 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 // Хендлер отвечает за поиск по ID таски в БД
 func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		task := storage.Task{}
 		resp := Response{}
 
 		// Достанем с урла ID таски
