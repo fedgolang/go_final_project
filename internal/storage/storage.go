@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -92,46 +93,127 @@ func (s *Scheduler) PostTask(task Task) (int, error) {
 }
 
 // Функция для запроса у БД лимитированное кол-во тасок, ближайшее к текущей дате
-func (s Scheduler) GetTasks(limit int, today string) (*sql.Rows, error) {
-	// Производим выборку данных из БД, сортированных по возрастанию даты
-	// Так же дата должна быть больше сегодняшней, так как ищем ближайшие задачи
-	// И ограничиваем лимитом, он нам приходит как аргумент limit
+func (s Scheduler) GetTasks(limit int, today string) ([]TaskNoEmpty, error) {
 	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
 		"FROM scheduler WHERE date >= ? " +
 		"ORDER BY date ASC " +
-		"LIMIT ? ")
+		"LIMIT ?")
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при выводе задач из БД: %s", err)
+		return nil, fmt.Errorf("ошибка при подготовке запроса: %s", err)
 	}
 	defer stmt.Close()
 
-	res, err := stmt.Query(today, limit)
-	// Обработаем ошибку отсутствия строк, иначе рухнем с err
-	if err == sql.ErrNoRows {
-		return res, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("ошибка при выводе задач из БД: %s", err)
+	// Запустим скрипт с нашими аргументами
+	rows, err := stmt.Query(today, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при выполнении запроса: %s", err)
+	}
+	defer rows.Close()
+
+	// Пройдемся по всем полученным строкам и запишем их в слайс слайсов
+	tasks := []TaskNoEmpty{}
+	for rows.Next() {
+		var task TaskNoEmpty
+		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+			return nil, fmt.Errorf("ошибка при чтении строки: %s", err)
+		}
+		tasks = append(tasks, task)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при возврате строк: %s", err)
+	}
+	return tasks, nil
+}
+
+// Отдельная функция для поиска по дате
+func (s Scheduler) GetTasksByDate(date string) ([]TaskNoEmpty, error) {
+	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
+		"FROM scheduler WHERE date = ?")
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при подготовке запроса: %s", err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.Query(date)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при выполнении запроса: %s", err)
+	}
+	defer rows.Close()
+
+	// Пройдемся по всем полученным строкам и запишем их в слайс слайсов
+	tasks := []TaskNoEmpty{}
+	for rows.Next() {
+		var task TaskNoEmpty
+		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+			return nil, fmt.Errorf("ошибка при чтении строки: %s", err)
+		}
+		tasks = append(tasks, task)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при возврате строк: %s", err)
 	}
 
-	return res, nil
+	return tasks, nil
+}
 
+// Отдельная функция для поиска по тексту, заголовок или коммент
+func (s Scheduler) GetTasksBySearch(limit int, today, search string) ([]TaskNoEmpty, error) {
+	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
+		"FROM scheduler WHERE date >= ? AND (title LIKE ? OR comment LIKE ?) " +
+		"ORDER BY date ASC " +
+		"LIMIT ?")
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при подготовке запроса: %s", err)
+	}
+	defer stmt.Close()
+
+	// Так же добавим % для использования LIKE в скрипте
+	searchPattern := "%" + search + "%"
+	rows, err := stmt.Query(today, searchPattern, searchPattern, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при выполнении запроса: %s", err)
+	}
+	defer rows.Close()
+
+	// Пройдемся по всем полученным строкам и запишем их в слайс слайсов
+	tasks := []TaskNoEmpty{}
+	for rows.Next() {
+		var task TaskNoEmpty
+		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+			return nil, fmt.Errorf("ошибка при чтении строки: %s", err)
+		}
+		tasks = append(tasks, task)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при возврате строк: %s", err)
+	}
+
+	return tasks, nil
 }
 
 // Функция поиска в БД таски по ID
-func (s Scheduler) GetTaskByID(id string) (*sql.Row, error) {
+func (s Scheduler) GetTaskByID(id string) (Task, error) {
+	task := Task{}
 	// Подготовим запрос к БД
 	stmt, err := s.db.Prepare("SELECT id, date, title, comment, repeat " +
 		"FROM scheduler WHERE id =?")
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при попытке найти задание в БД: %s", err)
+		return task, fmt.Errorf("ошибка при попытке найти задание в БД: %s", err)
 	}
 	defer stmt.Close()
 
 	// Так как id ключ с автоинкрементом, задача всегда будет одна
 	// Поэтому пользуемся QueryRow
-	res := stmt.QueryRow(id)
+	query := stmt.QueryRow(id)
+	err = query.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	if errors.Is(err, sql.ErrNoRows) {
+		return task, fmt.Errorf("задача не найдена")
+	}
 
-	return res, nil
+	return task, nil
 }
 
 func (s *Scheduler) EditTask(task Task) error {

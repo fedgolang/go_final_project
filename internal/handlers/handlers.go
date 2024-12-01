@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	nd "github.com/fedgolang/go_final_project/internal/lib/nextdate"
@@ -154,48 +153,33 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Объявим пустой слайс tasks, для случая если приходит пустой ответ из БД
 		tasks := TasksResponse{Tasks: []storage.TaskNoEmpty{}}
-		task := storage.TaskNoEmpty{}
 		resp := Response{}
 		today := time.Now().Format(`20060102`)
-
-		// Запросим из БД нужные таски
-		dbRows, err := s.GetTasks(limitForTasks, today)
-		if err != nil {
-			// Так как ошибку описываем внутри метода, тут просто запишем
-			resp.Err = fmt.Sprint(err)
-			prepareJSONResp(w, 400, resp)
-			return
-		}
 
 		// Попробуем достать GET параметр search
 		search := r.URL.Query().Get("search")
 		// Проверим, не дата ли нам пришла в поиске
 		searchDate, okDate := validateAndFormatDate(search)
 
-		// Если строки из БД есть, то работаем с ними
-		if dbRows != nil {
-			for dbRows.Next() {
-				err := dbRows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
-				if err != nil {
-					resp.Err = "ошибка при чтении данных"
-					prepareJSONResp(w, 400, resp)
-					return
-				} else {
-					// Если в поиске дата, ищем по дате
-					if okDate {
-						if searchDate == task.Date {
-							tasks.Tasks = append(tasks.Tasks, task)
-						}
-					} else if search != "" { // Если не дата, будем фильтровать по комменту и заголовку
-						if strings.Contains(task.Comment, search) || strings.Contains(task.Title, search) {
-							tasks.Tasks = append(tasks.Tasks, task)
-						}
-					} else { // Если параметра нет, выводим всё
-						tasks.Tasks = append(tasks.Tasks, task)
-					}
-				}
-			}
+		var dbTasks []storage.TaskNoEmpty
+		var err error
+
+		// В зависимости от полученных данных по поиску, запустим функции для БД
+		if okDate {
+			dbTasks, err = s.GetTasksByDate(searchDate)
+		} else if search != "" { // Если не дата, ищем по тексту
+			dbTasks, err = s.GetTasksBySearch(limitForTasks, today, search)
+		} else { // Если параметра нет, выводим ближайшие задачи
+			dbTasks, err = s.GetTasks(limitForTasks, today)
 		}
+
+		if err != nil {
+			resp.Err = fmt.Sprintf("ошибка при запросе задач: %s", err)
+			prepareJSONResp(w, 400, resp)
+			return
+		}
+
+		tasks.Tasks = dbTasks
 
 		prepareJSONResp(w, 200, tasks)
 	}
@@ -204,7 +188,7 @@ func GetTasks(s *storage.Scheduler) http.HandlerFunc {
 // Хендлер отвечает за поиск по ID таски в БД
 func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		task := storage.TaskNoEmpty{}
+		task := storage.Task{}
 		resp := Response{}
 
 		// Достанем с урла ID таски
@@ -216,22 +200,14 @@ func GetDataForEdit(s *storage.Scheduler) http.HandlerFunc {
 			resp.Err = "Не указан идентификатор"
 			prepareJSONResp(w, 400, resp)
 			return
-		} else {
-			// Если же id есть, идём в БД искать таску, она должна быть одна
-			singleTask, err := s.GetTaskByID(taskID)
-			if err != nil {
-				// Ошибку описываем внутри метода
-				resp.Err = fmt.Sprint(err)
-				prepareJSONResp(w, 400, resp)
-				return
-			}
-			err = singleTask.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
-			// Если по необходимому id нет задач, запишем ошибку
-			if errors.Is(err, sql.ErrNoRows) {
-				resp.Err = "Задача не найдена"
-				prepareJSONResp(w, 400, resp)
-				return
-			}
+		}
+		// Если же id есть, идём в БД искать таску, она должна быть одна
+		task, err := s.GetTaskByID(taskID)
+		if err != nil {
+			// Ошибку описываем внутри метода
+			resp.Err = fmt.Sprint(err)
+			prepareJSONResp(w, 400, resp)
+			return
 		}
 
 		prepareJSONResp(w, 200, task)
@@ -297,7 +273,8 @@ func PutDataByID(s *storage.Scheduler) http.HandlerFunc {
 			resp.Err = "Задача не найдена"
 			prepareJSONResp(w, 400, resp)
 			return
-		} else if err != nil {
+		}
+		if err != nil {
 			resp.Err = "Возникла проблема с изменением задачи"
 			prepareJSONResp(w, 400, resp)
 			return
@@ -321,22 +298,15 @@ func TaskDone(s *storage.Scheduler) http.HandlerFunc {
 			resp.Err = "Не указан идентификатор"
 			prepareJSONResp(w, 400, resp)
 			return
-		} else {
-			// Если же id есть, идём в БД искать таску, она должна быть одна
-			singleTask, err := s.GetTaskByID(taskID)
-			if err != nil {
-				// Ошибку описываем внутри метода
-				resp.Err = fmt.Sprint(err)
-				prepareJSONResp(w, 400, resp)
-				return
-			}
-			err = singleTask.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
-			// Если по необходимому id нет задач, запишем ошибку
-			if err == sql.ErrNoRows {
-				resp.Err = "Задача не найдена"
-				prepareJSONResp(w, 400, resp)
-				return
-			}
+		}
+
+		// Если же id есть, идём в БД искать таску, она должна быть одна
+		task, err := s.GetTaskByID(taskID)
+		if err != nil {
+			// Ошибку описываем внутри метода
+			resp.Err = fmt.Sprint(err)
+			prepareJSONResp(w, 400, resp)
+			return
 		}
 
 		// Если правил повторения нет, просто удаляем задачу
@@ -354,16 +324,15 @@ func TaskDone(s *storage.Scheduler) http.HandlerFunc {
 				resp.Err = fmt.Sprint(err)
 				prepareJSONResp(w, 400, resp)
 				return
-			} else {
-				// Проблем при вычислении даты не возникло, присвоим новую дату и отправим на изменение
-				task.Date = nextDate
-				err = s.EditTask(task)
-				if err != nil {
-					// Ошибку описываем в методе, тут просто запишем
-					resp.Err = fmt.Sprint(err)
-					prepareJSONResp(w, 400, resp)
-					return
-				}
+			}
+			// Проблем при вычислении даты не возникло, присвоим новую дату и отправим на изменение
+			task.Date = nextDate
+			err = s.EditTask(task)
+			if err != nil {
+				// Ошибку описываем в методе, тут просто запишем
+				resp.Err = fmt.Sprint(err)
+				prepareJSONResp(w, 400, resp)
+				return
 			}
 		}
 
